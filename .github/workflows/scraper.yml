@@ -30,4 +30,4 @@ jobs:
           sudo apt-get install -y chromium-browser
 
       - name: Executar scraper
-        run: python scraper.py
+        run: python -u scraper.py
