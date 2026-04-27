@@ -324,10 +324,11 @@ def listar_concorrentes_ativos():
 kpis = query_kpis()
 
 if not kpis or kpis[3] is None:
-    st.warning("⚠️ Sem dados ainda. Corre primeiro o scraper.py para popular a base de dados.")
-    st.info("💡 Dica: Execute 'python scraper.py --teste 5' para testar com alguns produtos.")
+    st.warning("⚠️ Sem dados ainda.")
     kpis = (0, 0, 0, None)
     ultima_data = "N/A"
+else:
+    ultima_data = datetime.strptime(kpis[3][:16], "%Y-%m-%d %H:%M")
 else:
     ultima_data = datetime.strptime(kpis[3][:16], "%Y-%m-%d %H:%M")
 
