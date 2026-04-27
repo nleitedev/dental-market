@@ -329,8 +329,6 @@ if not kpis or kpis[3] is None:
     ultima_data = "N/A"
 else:
     ultima_data = datetime.strptime(kpis[3][:16], "%Y-%m-%d %H:%M")
-else:
-    ultima_data = datetime.strptime(kpis[3][:16], "%Y-%m-%d %H:%M")
 
 col_logo, col_title = st.columns([1, 10])
 with col_logo:
@@ -345,11 +343,7 @@ col3.metric("📊 Registos BD", f"{kpis[2]:,}".replace(",", " "))
 col4.metric("🕐 Última Atualização", ultima_data.strftime("%d/%m/%Y %H:%M") if ultima_data != "N/A" else "N/A")
 st.divider()
 
-col_btn_refresh, col_space = st.columns([1, 11])
-with col_btn_refresh:
-    if st.button("🔄 Atualizar", help="Limpa o cache e recarrega todos os dados"):
-        st.cache_data.clear()
-        st.rerun()
+st.rerun()
 
 # ============================================================
 # DADOS AUXILIARES
