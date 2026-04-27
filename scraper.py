@@ -117,6 +117,9 @@ def iniciar_driver():
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-setuid-sandbox")
     options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option("useAutomationExtension", False)
     
@@ -588,11 +591,11 @@ def extrair_preco_generico(driver):
 def extrair_preco_uppermat(driver):
     """
     Extractor específico para ES_Uppermat.
-    Procura o preço na tabela '.variations-table' (primeira linha de dados).
+    Tenta obter o preço via tabela de variações; se falhar, procura no HTML completo.
     """
+    # Método 1: aguardar pela tabela (timeout generoso)
     try:
-        # Aguardar até 15 segundos pela tabela de variações
-        WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, ".variations-table tbody tr"))
         )
         primeira_linha = driver.find_element(By.CSS_SELECTOR, ".variations-table tbody tr")
@@ -605,22 +608,23 @@ def extrair_preco_uppermat(driver):
                 print(f"     [Uppermat] Preço encontrado: {preco:.2f}€")
                 return preco, True
     except TimeoutException:
-        print("     [Uppermat] Timeout ao esperar pela tabela de variações, a tentar fallback...")
+        print("     [Uppermat] Timeout (20s) à espera da tabela, a tentar fallback HTML...")
     except Exception as e:
         print(f"     [Uppermat] Erro no extrator específico: {e}")
 
-    # Fallback: procurar qualquer preço no corpo da página
+    # Método 2: Fallback agressivo – procurar todos os preços no HTML completo
     try:
-        texto = driver.find_element(By.TAG_NAME, "body").text
-        matches = re.findall(r'(\d+)[.,](\d+)\s*€', texto)
+        html = driver.page_source
+        # Encontrar padrões como "48.2€", "6.8€", etc.
+        matches = re.findall(r'(\d+)[.,](\d+)\s*€', html)
         precos = []
         for m in matches:
             p = limpar_preco(m[0], m[1])
             if p and 0 < p < 50000:
                 precos.append(p)
         if precos:
-            preco = min(precos)
-            print(f"     [Uppermat] Preço via fallback: {preco:.2f}€")
+            preco = min(precos)   # o menor preço costuma ser o correto
+            print(f"     [Uppermat] Preço via fallback HTML: {preco:.2f}€")
             return preco, True
     except Exception:
         pass
