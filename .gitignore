@@ -1,0 +1,17 @@
+# Ficheiros sensíveis
+.env
+*.db
+*.db-shm
+*.db-wal
+*.xlsx
+*.log
+*.json
+backups/
+BU/
+BU/TokenTURSO/
+Neon/
+logo.png
+
+# Python
+__pycache__/
+*.pyc
