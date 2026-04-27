@@ -14,6 +14,7 @@ import time
 import random
 import argparse
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -74,12 +75,9 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
     if conn is None:
         return
     try:
-        # Garantir que promo é um inteiro válido
-        try:
-            promo_int = int(promo)
-        except (TypeError, ValueError):
-            promo_int = 0
-
+        # Garantir que promo nunca é None (causava erro int())
+        if promo is None or promo == "None" or promo == "":
+            promo = 0
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO precos (artigo, descricao, concorrente, url, preco, stock, promo, data, sucesso, erro, referencia)
@@ -91,7 +89,7 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
             url,
             preco,
             stock,
-            promo_int,
+            int(promo),
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             int(sucesso),
             erro,
@@ -103,7 +101,6 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
         print(f"ERRO ao guardar preço: {e}")
     finally:
         conn.close()
-
 
 # ============================================================
 # SELENIUM
@@ -473,8 +470,10 @@ def extrair_preco_dentalexpress_es(driver):
     return None, False
 
 def extrair_preco_dentalexpress_pt(driver):
+    # Versão simplificada para evitar bloqueios
+    # 1. Meta tag itemprop="price" (4 segundos)
     try:
-        WebDriverWait(driver, 6).until(
+        WebDriverWait(driver, 4).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "meta[itemprop='price']"))
         )
         preco_str = driver.find_element(By.CSS_SELECTOR, "meta[itemprop='price']").get_attribute("content")
@@ -485,51 +484,23 @@ def extrair_preco_dentalexpress_pt(driver):
                 return round(preco, 2), True
     except Exception:
         pass
-    
+
+    # 2. Fallback: regex no corpo da página (rápido, sem esperas)
     try:
-        page_source = driver.page_source
-        match = re.search(r'(\d+),<sup>(\d+)</sup>', page_source)
-        if match:
-            preco = limpar_preco(match.group(1), match.group(2))
-            if preco and 0 < preco < 10000:
-                print(f"     [DentalExpress PT] HTML com sup: {preco:.2f}€")
-                return preco, True
+        page_text = driver.find_element(By.TAG_NAME, "body").text
+        matches = re.findall(r'(\d+)[.,](\d+)\s*€', page_text)
+        precos = []
+        for m in matches:
+            p = limpar_preco(m[0], m[1])
+            if p and 0 < p < 100000:
+                precos.append(p)
+        if precos:
+            preco = min(precos)  # o mais baixo costuma ser o preço real
+            print(f"     [DentalExpress PT] Fallback body: {preco:.2f}€")
+            return preco, True
     except Exception:
         pass
-    
-    try:
-        WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "span.price"))
-        )
-        elemento = driver.find_element(By.CSS_SELECTOR, "span.price")
-        
-        try:
-            html_interno = elemento.get_attribute("innerHTML")
-            if html_interno:
-                html_limpo = re.sub(r'<sup>', '', html_interno)
-                html_limpo = re.sub(r'</sup>', '', html_limpo)
-                html_limpo = html_limpo.replace('&nbsp;', ' ')
-                match = re.search(r'(\d+)[.,](\d+)', html_limpo)
-                if match:
-                    preco = limpar_preco(match.group(1), match.group(2))
-                    if preco and 0 < preco < 10000:
-                        print(f"     [DentalExpress PT] Span com sup: {preco:.2f}€")
-                        return preco, True
-        except:
-            pass
-        
-        preco_texto = elemento.text.strip()
-        if preco_texto:
-            preco_texto = preco_texto.replace(' ', '').replace('&nbsp;', '')
-            match = re.search(r'(\d+)[.,](\d+)', preco_texto)
-            if match:
-                preco = limpar_preco(match.group(1), match.group(2))
-                if preco and 0 < preco < 10000:
-                    print(f"     [DentalExpress PT] Span normal: {preco:.2f}€")
-                    return preco, True
-    except Exception:
-        pass
-    
+
     return None, False
 
 def extrair_preco_generico(driver):
@@ -618,7 +589,45 @@ def extrair_preco_generico(driver):
     
     return None, False
 
-# Mapa de extractores de preço
+def extrair_preco_uppermat(driver):
+    """
+    Extractor específico para ES_Uppermat.
+    Procura o preço na tabela '.variations-table' (primeira linha de dados).
+    """
+    try:
+        WebDriverWait(driver, 6).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".variations-table tbody tr"))
+        )
+        primeira_linha = driver.find_element(By.CSS_SELECTOR, ".variations-table tbody tr")
+        celula_preco = primeira_linha.find_element(By.CSS_SELECTOR, "td.text-uppermat")
+        texto = celula_preco.text.strip()
+        match = re.search(r'(\d+)[.,](\d+)', texto)
+        if match:
+            preco = limpar_preco(match.group(1), match.group(2))
+            if preco and 0 < preco < 50000:
+                print(f"     [Uppermat] Preço encontrado: {preco:.2f}€")
+                return preco, True
+    except Exception as e:
+        print(f"     [Uppermat] Erro no extrator específico: {e}")
+    
+    # Fallback: todo o corpo da página
+    try:
+        texto = driver.find_element(By.TAG_NAME, "body").text
+        matches = re.findall(r'(\d+)[.,](\d+)\s*€', texto)
+        precos = []
+        for m in matches:
+            p = limpar_preco(m[0], m[1])
+            if p and 0 < p < 50000:
+                precos.append(p)
+        if precos:
+            preco = min(precos)
+            print(f"     [Uppermat] Preço via fallback: {preco:.2f}€")
+            return preco, True
+    except Exception:
+        pass
+    
+    return None, False
+
 EXTRATORES = {
     "es_dvddental":         extrair_preco_dvddental,
     "dvddental":            extrair_preco_dvddental,
@@ -649,6 +658,9 @@ EXTRATORES = {
     "dentalexpress_es":     extrair_preco_dentalexpress_es,
     "pt_dentalexpress":     extrair_preco_dentalexpress_pt,
     "dentalexpress_pt":     extrair_preco_dentalexpress_pt,
+
+    "es_uppermat":          extrair_preco_uppermat,
+    "uppermat":             extrair_preco_uppermat,
 }
 
 # ============================================================
@@ -1088,7 +1100,6 @@ def extrair_referencia_dentaliberica(driver):
     return extrair_referencia_generico(driver)
 
 
-# Mapeamento de extractores de referência
 REFERENCIA_EXTRATORES = {
     "es_dvddental": extrair_referencia_dvddental,
     "dvddental": extrair_referencia_dvddental,
@@ -1164,57 +1175,37 @@ REFERENCIA_EXTRATORES = {
 # ============================================================
 # FUNÇÃO PRINCIPAL DE SCRAPE
 # ============================================================
-
 def scrape_url(driver, url, concorrente):
     if not url_valida(url):
         return None, None, None, False, "URL inválido"
     
     try:
-        # Timeout para evitar que o scraper fique preso
-        driver.set_page_load_timeout(20)
         driver.get(url)
+        time.sleep(2.5)
+        
+        if not pagina_valida(driver):
+            return None, None, None, False, "Página não encontrada"
+        
+        # Preço
+        extrator = EXTRATORES.get(concorrente.lower(), extrair_preco_generico)
+        preco, ok = extrator(driver)
+        if not ok or preco is None:
+            preco, ok = extrair_preco_generico(driver)
+        
+        # Referência
+        ref_extrator = REFERENCIA_EXTRATORES.get(concorrente.lower(), extrair_referencia_generico)
+        referencia = ref_extrator(driver)
+        
+        stock = verificar_stock(driver)
+        promo = verificar_promo(driver)
+        
+        if preco:
+            return preco, stock, promo, referencia, None
+        return None, stock, promo, referencia, "Preço não extraído"
     except TimeoutException:
-        return None, None, None, False, "Timeout ao carregar página"
+        return None, None, None, False, "Timeout"
     except Exception as e:
-        return None, None, None, False, f"Erro ao carregar: {str(e)[:80]}"
-
-    time.sleep(2)  # tempo reduzido
-
-    if not pagina_valida(driver):
-        return None, None, None, False, "Página não encontrada"
-
-    # Tentar fechar pop‑ups comuns (cookies)
-    try:
-        # Procurar botões de aceitar cookies com selectores comuns
-        cookie_btns = driver.find_elements(By.CSS_SELECTOR, 
-            "[id*='accept'], [class*='accept'], [id*='cookie'], [class*='cookie'], "
-            "[aria-label*='cookie'], [aria-label*='Cookie'], "
-            "button:contains('Accept'), button:contains('Aceitar'), button:contains('OK')")
-        for btn in cookie_btns[:3]:  # tenta no máximo 3 botões
-            try:
-                btn.click()
-                time.sleep(1)
-            except:
-                pass
-    except:
-        pass
-    
-    # Preço
-    extrator = EXTRATORES.get(concorrente.lower(), extrair_preco_generico)
-    preco, ok = extrator(driver)
-    if not ok or preco is None:
-        preco, ok = extrair_preco_generico(driver)
-    
-    # Referência
-    ref_extrator = REFERENCIA_EXTRATORES.get(concorrente.lower(), extrair_referencia_generico)
-    referencia = ref_extrator(driver)
-    
-    stock = verificar_stock(driver)
-    promo = verificar_promo(driver)
-    
-    if preco:
-        return preco, stock, promo, referencia, None
-    return None, stock, promo, referencia, "Preço não extraído"
+        return None, None, None, False, str(e)[:80]
 
 # ============================================================
 # MAIN
@@ -1295,7 +1286,16 @@ def main():
                 continue
 
             print(f"  A processar {artigo}...")
-            preco, stock, promo, referencia, erro = scrape_url(driver, url, conc)
+            
+            # Timeout por artigo (30 segundos)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(scrape_url, driver, url, conc)
+                try:
+                    preco, stock, promo, referencia, erro = future.result(timeout=30)
+                except FuturesTimeoutError:
+                    preco, stock, promo, referencia, erro = None, None, False, None, "Timeout (>30s)"
+                except Exception as e:
+                    preco, stock, promo, referencia, erro = None, None, False, None, str(e)[:80]
 
             guardar_preco(artigo, descricao, conc, url,
                           preco, stock, promo,
