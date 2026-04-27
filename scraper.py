@@ -1164,37 +1164,57 @@ REFERENCIA_EXTRATORES = {
 # ============================================================
 # FUNÇÃO PRINCIPAL DE SCRAPE
 # ============================================================
+
 def scrape_url(driver, url, concorrente):
     if not url_valida(url):
         return None, None, None, False, "URL inválido"
     
     try:
+        # Timeout para evitar que o scraper fique preso
+        driver.set_page_load_timeout(20)
         driver.get(url)
-        time.sleep(2.5)
-        
-        if not pagina_valida(driver):
-            return None, None, None, False, "Página não encontrada"
-        
-        # Preço
-        extrator = EXTRATORES.get(concorrente.lower(), extrair_preco_generico)
-        preco, ok = extrator(driver)
-        if not ok or preco is None:
-            preco, ok = extrair_preco_generico(driver)
-        
-        # Referência
-        ref_extrator = REFERENCIA_EXTRATORES.get(concorrente.lower(), extrair_referencia_generico)
-        referencia = ref_extrator(driver)
-        
-        stock = verificar_stock(driver)
-        promo = verificar_promo(driver)
-        
-        if preco:
-            return preco, stock, promo, referencia, None
-        return None, stock, promo, referencia, "Preço não extraído"
     except TimeoutException:
-        return None, None, None, False, "Timeout"
+        return None, None, None, False, "Timeout ao carregar página"
     except Exception as e:
-        return None, None, None, False, str(e)[:80]
+        return None, None, None, False, f"Erro ao carregar: {str(e)[:80]}"
+
+    time.sleep(2)  # tempo reduzido
+
+    if not pagina_valida(driver):
+        return None, None, None, False, "Página não encontrada"
+
+    # Tentar fechar pop‑ups comuns (cookies)
+    try:
+        # Procurar botões de aceitar cookies com selectores comuns
+        cookie_btns = driver.find_elements(By.CSS_SELECTOR, 
+            "[id*='accept'], [class*='accept'], [id*='cookie'], [class*='cookie'], "
+            "[aria-label*='cookie'], [aria-label*='Cookie'], "
+            "button:contains('Accept'), button:contains('Aceitar'), button:contains('OK')")
+        for btn in cookie_btns[:3]:  # tenta no máximo 3 botões
+            try:
+                btn.click()
+                time.sleep(1)
+            except:
+                pass
+    except:
+        pass
+    
+    # Preço
+    extrator = EXTRATORES.get(concorrente.lower(), extrair_preco_generico)
+    preco, ok = extrator(driver)
+    if not ok or preco is None:
+        preco, ok = extrair_preco_generico(driver)
+    
+    # Referência
+    ref_extrator = REFERENCIA_EXTRATORES.get(concorrente.lower(), extrair_referencia_generico)
+    referencia = ref_extrator(driver)
+    
+    stock = verificar_stock(driver)
+    promo = verificar_promo(driver)
+    
+    if preco:
+        return preco, stock, promo, referencia, None
+    return None, stock, promo, referencia, "Preço não extraído"
 
 # ============================================================
 # MAIN
