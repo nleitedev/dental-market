@@ -8,4 +8,5 @@ python-dotenv
 openpyxl
 schedule
 pyodbc
+psycopg2-binary
 python-dotenv
