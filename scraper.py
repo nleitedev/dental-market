@@ -74,6 +74,12 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
     if conn is None:
         return
     try:
+        # Garantir que promo é um inteiro válido
+        try:
+            promo_int = int(promo)
+        except (TypeError, ValueError):
+            promo_int = 0
+
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO precos (artigo, descricao, concorrente, url, preco, stock, promo, data, sucesso, erro, referencia)
@@ -85,7 +91,7 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
             url,
             preco,
             stock,
-            int(promo),
+            promo_int,
             datetime.now().strftime("%Y-%m-%d %H:%M"),
             int(sucesso),
             erro,
@@ -97,6 +103,7 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
         print(f"ERRO ao guardar preço: {e}")
     finally:
         conn.close()
+
 
 # ============================================================
 # SELENIUM
