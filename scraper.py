@@ -586,8 +586,13 @@ def extrair_preco_generico(driver):
     return None, False
 
 def extrair_preco_uppermat(driver):
+    """
+    Extractor específico para ES_Uppermat.
+    Procura o preço na tabela '.variations-table' (primeira linha de dados).
+    """
     try:
-        WebDriverWait(driver, 6).until(
+        # Aguardar até 15 segundos pela tabela de variações
+        WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, ".variations-table tbody tr"))
         )
         primeira_linha = driver.find_element(By.CSS_SELECTOR, ".variations-table tbody tr")
@@ -599,9 +604,12 @@ def extrair_preco_uppermat(driver):
             if preco and 0 < preco < 50000:
                 print(f"     [Uppermat] Preço encontrado: {preco:.2f}€")
                 return preco, True
+    except TimeoutException:
+        print("     [Uppermat] Timeout ao esperar pela tabela de variações, a tentar fallback...")
     except Exception as e:
         print(f"     [Uppermat] Erro no extrator específico: {e}")
-    
+
+    # Fallback: procurar qualquer preço no corpo da página
     try:
         texto = driver.find_element(By.TAG_NAME, "body").text
         matches = re.findall(r'(\d+)[.,](\d+)\s*€', texto)
@@ -616,7 +624,7 @@ def extrair_preco_uppermat(driver):
             return preco, True
     except Exception:
         pass
-    
+
     return None, False
 
 EXTRATORES = {
