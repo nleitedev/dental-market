@@ -248,24 +248,49 @@ def query_historico(artigo: str, concorrentes_filtro: tuple, dias: int):
 @st.cache_data(ttl=300)
 def query_alertas():
     engine = obter_conn()
+    sql = text("""
+        WITH ranked AS (
+            SELECT
+                artigo,
+                descricao,
+                concorrente,
+                preco,
+                data,
+                referencia,
+                ROW_NUMBER() OVER (PARTITION BY artigo, concorrente ORDER BY data DESC) AS rn
+            FROM precos
+            WHERE sucesso = 1
+        ),
+        atual AS (
+            SELECT artigo, descricao, concorrente, preco, data, referencia
+            FROM ranked
+            WHERE rn = 1
+        ),
+        ant AS (
+            SELECT artigo, concorrente, preco, data
+            FROM ranked
+            WHERE rn = 2
+        )
+        SELECT
+            a.artigo,
+            a.descricao,
+            a.concorrente,
+            a.preco AS preco_atual,
+            p.preco AS preco_anterior,
+            ROUND((a.preco - p.preco) / p.preco * 100, 1) AS variacao_pct,
+            a.referencia
+        FROM atual a
+        JOIN ant p
+            ON a.artigo = p.artigo
+            AND a.concorrente = p.concorrente
+        WHERE
+            a.preco IS NOT NULL
+            AND p.preco IS NOT NULL
+            AND a.preco <> p.preco
+        ORDER BY variacao_pct
+    """)
     with engine.connect() as conn:
-        result = conn.execute(text("""
-            WITH ranked AS (
-                SELECT artigo, descricao, concorrente, preco, data, referencia,
-                       ROW_NUMBER() OVER (PARTITION BY artigo, concorrente ORDER BY data DESC) as rn
-                FROM precos WHERE sucesso=1
-            ),
-            atual AS (SELECT * FROM ranked WHERE rn=1),
-            ant AS (SELECT * FROM ranked WHERE rn=2)
-            SELECT a.artigo, a.descricao, a.concorrente,
-                   a.preco as preco_atual, p.preco as preco_anterior,
-                   ROUND((a.preco - p.preco) / p.preco * 100, 1) as variacao_pct,
-                   a.referencia
-            FROM atual a
-            JOIN ant p ON a.artigo = p.artigo AND a.concorrente = p.concorrente
-            WHERE a.preco IS NOT NULL AND p.preco IS NOT NULL AND a.preco <> p.preco
-            ORDER BY variacao_pct
-        """))
+        result = conn.execute(sql)
         df = pd.DataFrame(result.fetchall(), columns=result.keys())
     return df
 
