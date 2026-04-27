@@ -2,7 +2,7 @@ name: Executar Scraper Diariamente
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # Todos os dias às 03:00 UTC
+    - cron: '0 0 * * *'   # Todos os dias às 00:00 UTC
   workflow_dispatch:       # Permite executar manualmente
 
 jobs:
