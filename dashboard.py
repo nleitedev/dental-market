@@ -1536,14 +1536,12 @@ with tab4:
 
     concorrentes_ativos = listar_concorrentes_ativos()
 
-    # SEÇÃO 1: ATUALIZAR CATÁLOGO (chama script externo adaptado)
-    with st.expander("🔄 Actualizar Catálogo (Douromed + Concorrentes)", expanded=False):
+    # SEÇÃO 1: ATUALIZAR CATÁLOGO (funcionalidade local)
+    with st.expander("🔄 Actualizar Catálogo (Douromed)", expanded=False):
         st.markdown("""
-        Esta operação irá:
-        - 🔄 Actualizar a tabela **artigos** com os dados mais recentes do SQL Server da Douromed.
-        - 📝 Actualizar as tabelas **concorrentes** e **links** com base nas folhas do Excel.
+        Esta operação liga-se ao **SQL Server da Douromed** para atualizar a tabela de **artigos**.
         """)
-        st.info("⚠️ Esta operação pode demorar alguns minutos. O script 'gerar_template_excel.py' deve estar adaptado para escrever na BD do Neon.")
+        st.info("⚠️ Esta funcionalidade só funciona quando o dashboard é executado **localmente**, com acesso à rede da Douromed.")
 
         if st.button("🔄 Actualizar Catálogo", type="primary", key="btn_actualizar_catalogo"):
             with st.spinner("A actualizar catálogo..."):
@@ -1558,18 +1556,22 @@ with tab4:
                             encoding='utf-8',
                             errors='replace'
                         )
-                        log_output = result.stdout + "\n" + result.stderr if result.stderr else result.stdout
+                        log_output = (result.stdout + "\n" + result.stderr) if result.stderr else result.stdout
                         st.text_area("Log da actualização:", log_output, height=200)
+                        
                         if result.returncode == 0:
                             st.success("✅ Catálogo actualizado com sucesso!")
                             st.cache_data.clear()
+                            time.sleep(1)
                             st.rerun()
                         else:
-                            st.error(f"❌ Erro ao actualizar catálogo. Código de saída: {result.returncode}")
+                            st.error(f"❌ O script terminou com erros (código {result.returncode}). Verifique o log acima.")
+                            st.caption("Se estiver a utilizar o dashboard na cloud, este erro é esperado. Execute o dashboard localmente para atualizar o catálogo.")
                     else:
-                        st.error(f"❌ Script não encontrado em: {script_path}")
+                        st.error(f"❌ Script 'gerar_catalogo_neon.py' não encontrado em: {script_path}")
                 except Exception as e:
-                    st.error(f"❌ Erro: {str(e)}")
+                    st.error(f"❌ Erro inesperado: {str(e)}")
+                    st.caption("Provavelmente o script não pode ser executado neste ambiente. Execute o dashboard localmente.")
 
     st.divider()
 
