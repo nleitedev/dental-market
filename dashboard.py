@@ -1548,7 +1548,7 @@ with tab4:
         if st.button("🔄 Actualizar Catálogo", type="primary", key="btn_actualizar_catalogo"):
             with st.spinner("A actualizar catálogo..."):
                 try:
-                    script_path = BASE_DIR / "gerar_template_excel.py"
+                    script_path = BASE_DIR / "gerar_catalogo_neon.py"
                     if script_path.exists():
                         result = subprocess.run(
                             [sys.executable, str(script_path)],
