@@ -249,7 +249,7 @@ def query_historico(artigo: str, concorrentes_filtro: tuple, dias: int):
 def query_alertas():
     engine = obter_conn()
     sql = text("""
-        WITH ranked AS (
+        WITH precos_ordenados AS (
             SELECT
                 artigo,
                 descricao,
@@ -257,41 +257,30 @@ def query_alertas():
                 preco,
                 data,
                 referencia,
-                ROW_NUMBER() OVER (PARTITION BY artigo, concorrente ORDER BY data DESC) AS rn
+                LAG(preco) OVER (PARTITION BY artigo, concorrente ORDER BY data) AS preco_anterior,
+                LAG(data) OVER (PARTITION BY artigo, concorrente ORDER BY data) AS data_anterior
             FROM precos
             WHERE sucesso = 1
-        ),
-        atual AS (
-            SELECT artigo, descricao, concorrente, preco, data, referencia
-            FROM ranked
-            WHERE rn = 1
-        ),
-        ant AS (
-            SELECT artigo, concorrente, preco, data
-            FROM ranked
-            WHERE rn = 2
         )
         SELECT
-            a.artigo,
-            a.descricao,
-            a.concorrente,
-            a.preco AS preco_atual,
-            p.preco AS preco_anterior,
-            ROUND((a.preco - p.preco) / p.preco * 100, 1) AS variacao_pct,
-            a.referencia
-        FROM atual a
-        JOIN ant p
-            ON a.artigo = p.artigo
-            AND a.concorrente = p.concorrente
-        WHERE
-            a.preco IS NOT NULL
-            AND p.preco IS NOT NULL
-            AND a.preco <> p.preco
-        ORDER BY variacao_pct
+            artigo,
+            descricao,
+            concorrente,
+            preco AS preco_atual,
+            preco_anterior,
+            data AS data_atual,
+            data_anterior,
+            ROUND((preco::numeric - preco_anterior::numeric) / preco_anterior::numeric * 100, 1) AS variacao_pct
+        FROM precos_ordenados
+        WHERE preco_anterior IS NOT NULL AND preco <> preco_anterior
+        ORDER BY data DESC
     """)
     with engine.connect() as conn:
         result = conn.execute(sql)
         df = pd.DataFrame(result.fetchall(), columns=result.keys())
+    if not df.empty:
+        df["data_atual"] = pd.to_datetime(df["data_atual"])
+        df["data_anterior"] = pd.to_datetime(df["data_anterior"])
     return df
 
 # ============================================================
