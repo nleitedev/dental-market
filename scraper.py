@@ -1278,52 +1278,51 @@ def main():
         sheet_ok = 0
         sheet_erro = 0
 
-    for artigo, descricao, url in links:
-    if not artigo or artigo == "nan" or artigo == "":
-        continue
-    if not url_valida(url):
-        continue
+        for artigo, descricao, url in links:
+            if not artigo or artigo == "nan" or artigo == "":
+                continue
+            if not url_valida(url):
+                continue
 
-    print(f"  A processar {artigo}... (hora: {datetime.now().strftime('%H:%M:%S')})")
-    
-    # Definir um timeout curto para o carregamento da página
-    driver.set_page_load_timeout(15)
-    try:
-        driver.get(url)
-    except TimeoutException:
-        print(f"  ERRO {artigo:15}  Timeout ao carregar página")
-        guardar_preco(artigo, descricao, conc, url, None, None, False, False, erro="Timeout ao carregar página")
-        sheet_erro += 1
-        total_erro += 1
-        continue
-    except Exception as e:
-        print(f"  ERRO {artigo:15}  Erro ao aceder à página: {e}")
-        guardar_preco(artigo, descricao, conc, url, None, None, False, False, erro=str(e)[:80])
-        sheet_erro += 1
-        total_erro += 1
-        continue
+            print(f"  A processar {artigo}... (hora: {datetime.now().strftime('%H:%M:%S')})")
+            
+            # Timeout curto para o carregamento da página
+            driver.set_page_load_timeout(15)
+            try:
+                driver.get(url)
+            except TimeoutException:
+                print(f"  ERRO {artigo:15}  Timeout ao carregar página")
+                guardar_preco(artigo, descricao, conc, url, None, None, False, False, erro="Timeout ao carregar página")
+                sheet_erro += 1
+                total_erro += 1
+                continue
+            except Exception as e:
+                print(f"  ERRO {artigo:15}  Erro ao aceder à página: {e}")
+                guardar_preco(artigo, descricao, conc, url, None, None, False, False, erro=str(e)[:80])
+                sheet_erro += 1
+                total_erro += 1
+                continue
 
-    time.sleep(2.5)  # Pequena pausa após carregamento
+            time.sleep(2.5)
 
-    # Usar o extrator normal (o código existente)
-    try:
-        preco, stock, promo, referencia, erro = scrape_url(driver, url, conc)
-    except Exception as e:
-        preco, stock, promo, referencia, erro = None, None, False, None, str(e)[:80]
+            try:
+                preco, stock, promo, referencia, erro = scrape_url(driver, url, conc)
+            except Exception as e:
+                preco, stock, promo, referencia, erro = None, None, False, None, str(e)[:80]
 
-    guardar_preco(artigo, descricao, conc, url, preco, stock, promo, sucesso=(preco is not None), erro=erro, referencia=referencia)
+            guardar_preco(artigo, descricao, conc, url, preco, stock, promo, sucesso=(preco is not None), erro=erro, referencia=referencia)
 
-    if preco:
-        ref_str = f" ({referencia})" if referencia else ""
-        print(f"  OK {artigo:15}  {preco:8.2f}€  {stock}  {'PROMO' if promo else ''}{ref_str}")
-        sheet_ok += 1
-        total_ok += 1
-    else:
-        print(f"  ERRO {artigo:15}  {erro}")
-        sheet_erro += 1
-        total_erro += 1
+            if preco:
+                ref_str = f" ({referencia})" if referencia else ""
+                print(f"  OK {artigo:15}  {preco:8.2f}€  {stock}  {'PROMO' if promo else ''}{ref_str}")
+                sheet_ok += 1
+                total_ok += 1
+            else:
+                print(f"  ERRO {artigo:15}  {erro}")
+                sheet_erro += 1
+                total_erro += 1
 
-    time.sleep(random.uniform(1.5, 3.0))
+            time.sleep(random.uniform(1.5, 3.0))
 
     driver.quit()
 
