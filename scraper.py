@@ -57,13 +57,13 @@ def registar_execucao_scraper(site=None, teste=None, sucesso=True, total_ok=0, t
 def obter_conn_pg():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
-        print("ERRO: Variável DATABASE_URL não definida no ficheiro .env")
+        print("ERRO: Variável DATABASE_URL não definida no ficheiro .env", flush=True)
         return None
     try:
         conn = psycopg2.connect(database_url)
         return conn
     except Exception as e:
-        print(f"ERRO ao ligar ao PostgreSQL: {e}")
+        print(f"ERRO ao ligar ao PostgreSQL: {e}", flush=True)
         return None
 
 # ============================================================
@@ -97,7 +97,7 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
         conn.commit()
         cur.close()
     except Exception as e:
-        print(f"ERRO ao guardar preço: {e}")
+        print(f"ERRO ao guardar preço: {e}", flush=True)
     finally:
         conn.close()
 
@@ -105,7 +105,7 @@ def guardar_preco(artigo, descricao, concorrente, url, preco, stock, promo, suce
 # SELENIUM
 # ============================================================
 def iniciar_driver():
-    print("  A iniciar Chrome...")
+    print("  A iniciar Chrome...", flush=True)
     options = webdriver.ChromeOptions()
     options.add_argument('--headless=new')
     options.add_argument('--disable-gpu')
@@ -123,7 +123,7 @@ def iniciar_driver():
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(30)
-    print("  Chrome iniciado!")
+    print("  Chrome iniciado!", flush=True)
     return driver
 
 # ============================================================
@@ -469,8 +469,6 @@ def extrair_preco_dentalexpress_es(driver):
     return None, False
 
 def extrair_preco_dentalexpress_pt(driver):
-    # Versão simplificada para evitar bloqueios
-    # 1. Meta tag itemprop="price" (4 segundos)
     try:
         WebDriverWait(driver, 4).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "meta[itemprop='price']"))
@@ -484,7 +482,6 @@ def extrair_preco_dentalexpress_pt(driver):
     except Exception:
         pass
 
-    # 2. Fallback: regex no corpo da página (rápido, sem esperas)
     try:
         page_text = driver.find_element(By.TAG_NAME, "body").text
         matches = re.findall(r'(\d+)[.,](\d+)\s*€', page_text)
@@ -494,7 +491,7 @@ def extrair_preco_dentalexpress_pt(driver):
             if p and 0 < p < 100000:
                 precos.append(p)
         if precos:
-            preco = min(precos)  # o mais baixo costuma ser o preço real
+            preco = min(precos)
             print(f"     [DentalExpress PT] Fallback body: {preco:.2f}€")
             return preco, True
     except Exception:
@@ -589,10 +586,6 @@ def extrair_preco_generico(driver):
     return None, False
 
 def extrair_preco_uppermat(driver):
-    """
-    Extractor específico para ES_Uppermat.
-    Procura o preço na tabela '.variations-table' (primeira linha de dados).
-    """
     try:
         WebDriverWait(driver, 6).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, ".variations-table tbody tr"))
@@ -609,7 +602,6 @@ def extrair_preco_uppermat(driver):
     except Exception as e:
         print(f"     [Uppermat] Erro no extrator específico: {e}")
     
-    # Fallback: todo o corpo da página
     try:
         texto = driver.find_element(By.TAG_NAME, "body").text
         matches = re.findall(r'(\d+)[.,](\d+)\s*€', texto)
@@ -666,7 +658,6 @@ EXTRATORES = {
 # EXTRACTORES DE REFERÊNCIA
 # ============================================================
 def extrair_referencia_generico(driver):
-    """Tenta extrair SKU ou referência de locais comuns."""
     for meta_sel in ["meta[itemprop='sku']", "meta[property='product:retailer_item_id']"]:
         try:
             meta = driver.find_element(By.CSS_SELECTOR, meta_sel)
@@ -1215,10 +1206,11 @@ def main():
     parser.add_argument("--teste", type=int, default=None, help="Limitar a N produtos (para teste)")
     args = parser.parse_args()
 
-    print(f"\n{'='*55}")
-    print(f"  DENTAL MONITOR - Scraper de Precos")
-    print(f"  {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    print(f"{'='*55}\n")
+    print("\n" + "="*55, flush=True)
+    print(f"  DENTAL MONITOR - Scraper de Precos", flush=True)
+    print(f"  {datetime.now().strftime('%d/%m/%Y %H:%M')}", flush=True)
+    print("="*55 + "\n", flush=True)
+    print("Iniciando scraper...", flush=True)
 
     # Obter concorrentes ativos da BD
     conn_list = obter_conn_pg()
@@ -1234,23 +1226,23 @@ def main():
         concorrentes = [row[0] for row in cur.fetchall()]
         cur.close()
     except Exception as e:
-        print(f"ERRO ao obter concorrentes: {e}")
+        print(f"ERRO ao obter concorrentes: {e}", flush=True)
         conn_list.close()
         return
     conn_list.close()
 
     if not concorrentes:
-        print("Nenhum concorrente ativo encontrado.")
+        print("Nenhum concorrente ativo encontrado.", flush=True)
         return
 
-    print(f"Processando: {', '.join(concorrentes)}\n")
+    print(f"Processando: {', '.join(concorrentes)}\n", flush=True)
 
     driver = iniciar_driver()
     total_ok = 0
     total_erro = 0
 
     for conc in concorrentes:
-        print(f"\n>> {conc}")
+        print(f"\n>> {conc}", flush=True)
         conn_links = obter_conn_pg()
         if conn_links is None:
             continue
@@ -1266,14 +1258,14 @@ def main():
             links = cur.fetchall()
             cur.close()
         except Exception as e:
-            print(f"ERRO ao obter links para {conc}: {e}")
+            print(f"ERRO ao obter links para {conc}: {e}", flush=True)
             conn_links.close()
             continue
         conn_links.close()
 
         if args.teste:
             links = links[:args.teste]
-            print(f"  [TESTE: {args.teste} produtos]")
+            print(f"  [TESTE: {args.teste} produtos]", flush=True)
 
         sheet_ok = 0
         sheet_erro = 0
@@ -1284,20 +1276,20 @@ def main():
             if not url_valida(url):
                 continue
 
-            print(f"  A processar {artigo}... (hora: {datetime.now().strftime('%H:%M:%S')})")
+            print(f"  A processar {artigo}... (hora: {datetime.now().strftime('%H:%M:%S')})", flush=True)
             
-            # Timeout curto para o carregamento da página
+            # Timeout curto para carregamento
             driver.set_page_load_timeout(15)
             try:
                 driver.get(url)
             except TimeoutException:
-                print(f"  ERRO {artigo:15}  Timeout ao carregar página")
+                print(f"  ERRO {artigo:15}  Timeout ao carregar página", flush=True)
                 guardar_preco(artigo, descricao, conc, url, None, None, False, False, erro="Timeout ao carregar página")
                 sheet_erro += 1
                 total_erro += 1
                 continue
             except Exception as e:
-                print(f"  ERRO {artigo:15}  Erro ao aceder à página: {e}")
+                print(f"  ERRO {artigo:15}  Erro ao aceder à página: {e}", flush=True)
                 guardar_preco(artigo, descricao, conc, url, None, None, False, False, erro=str(e)[:80])
                 sheet_erro += 1
                 total_erro += 1
@@ -1314,15 +1306,19 @@ def main():
 
             if preco:
                 ref_str = f" ({referencia})" if referencia else ""
-                print(f"  OK {artigo:15}  {preco:8.2f}€  {stock}  {'PROMO' if promo else ''}{ref_str}")
+                print(f"  OK {artigo:15}  {preco:8.2f}€  {stock}  {'PROMO' if promo else ''}{ref_str}", flush=True)
                 sheet_ok += 1
                 total_ok += 1
             else:
-                print(f"  ERRO {artigo:15}  {erro}")
+                print(f"  ERRO {artigo:15}  {erro}", flush=True)
                 sheet_erro += 1
                 total_erro += 1
 
             time.sleep(random.uniform(1.5, 3.0))
+
+        if sheet_ok > 0 or sheet_erro > 0:
+            print(f"  RES {conc}: OK {sheet_ok}  ERRO {sheet_erro}", flush=True)
+        time.sleep(2)
 
     driver.quit()
 
@@ -1334,10 +1330,10 @@ def main():
         total_erro=total_erro
     )
 
-    print(f"\n{'='*55}")
-    print(f"  SUCESSO: {total_ok}")
-    print(f"  ERROS:   {total_erro}")
-    print(f"{'='*55}\n")
+    print(f"\n{'='*55}", flush=True)
+    print(f"  SUCESSO: {total_ok}", flush=True)
+    print(f"  ERROS:   {total_erro}", flush=True)
+    print(f"{'='*55}\n", flush=True)
 
 if __name__ == "__main__":
     main()
