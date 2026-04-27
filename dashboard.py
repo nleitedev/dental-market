@@ -343,7 +343,12 @@ col3.metric("📊 Registos BD", f"{kpis[2]:,}".replace(",", " "))
 col4.metric("🕐 Última Atualização", ultima_data.strftime("%d/%m/%Y %H:%M") if ultima_data != "N/A" else "N/A")
 st.divider()
 
-st.rerun()
+# Botão para limpar cache e recarregar dados manualmente
+col_btn_refresh, col_space = st.columns([1, 11])
+with col_btn_refresh:
+    if st.button("🔄 Atualizar", help="Limpa o cache e recarrega todos os dados"):
+        st.cache_data.clear()
+        st.rerun()
 
 # ============================================================
 # DADOS AUXILIARES
